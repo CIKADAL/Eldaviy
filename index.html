@@ -253,6 +253,15 @@
             font-size: 22px;
         }
         
+        /* CSS Class for Product Description */
+        .product-description {
+            font-size: 14px;
+            color: #666;
+            margin: 10px 0 15px 0;
+            padding: 0 15px;
+            min-height: 40px;
+        }
+
         .product-price {
             color: var(--text-color);
             font-size: 18px;
@@ -502,6 +511,7 @@
         }
         .cart-subtotal { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; margin-bottom: 10px; }
         .cart-discount { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 10px; color: var(--success-color); }
+        .cart-shipping { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 10px; }
         .cart-total { display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; margin-bottom: 20px; border-top: 1px solid #eee; padding-top: 10px; }
         .coupon-section { margin-bottom: 15px; }
         .coupon-input { display: flex; gap: 10px; }
@@ -688,8 +698,7 @@
         <section id="categories" class="categories-section container">
             <h2 class="section-title reveal">Shop By Category</h2>
             <div class="categories-grid" id="categoriesGrid">
-                <!-- Categories will be loaded here -->
-            </div>
+                </div>
         </section>
 
         <section id="products" class="products-section container">
@@ -797,15 +806,19 @@
                 </div>
                 <div class="cart-subtotal">
                     <span>Subtotal</span>
-                    <span id="cart-subtotal-price">$0.00</span>
+                    <span id="cart-subtotal-price">0.00 MAD</span>
                 </div>
                 <div class="cart-discount" id="discountSection" style="display: none;">
                     <span>Discount</span>
-                    <span id="discount-amount">-$0.00</span>
+                    <span id="discount-amount">-0.00 MAD</span>
+                </div>
+                <div class="cart-shipping" id="shippingSection">
+                    <span>Standard Shipping</span>
+                    <span id="shipping-cost">0.00 MAD</span>
                 </div>
                 <div class="cart-total">
                     <span>Total</span>
-                    <span id="cart-total-price">$0.00</span>
+                    <span id="cart-total-price">0.00 MAD</span>
                 </div>
                 <button class="btn-checkout" id="checkoutBtn" disabled>Proceed to Checkout</button>
             </div>
@@ -861,6 +874,11 @@
         let categoriesData = {};
         let couponsData = {};
         let appliedCoupon = null;
+        let shippingSettings = {
+            baseCost: 5,
+            increaseThreshold: 2,
+            increasePercentage: 10
+        };
 
         function loadStoreData() {
             // Load background settings
@@ -905,7 +923,37 @@
                 couponsData = snapshot.val() || {};
             });
 
+            // Load shipping settings
+            database.ref('admin/shippingSettings').on('value', snapshot => {
+                const settings = snapshot.val();
+                if (settings) {
+                    shippingSettings = {
+                        baseCost: settings.baseCost || 5,
+                        increaseThreshold: settings.increaseThreshold || 2,
+                        increasePercentage: settings.increasePercentage || 10
+                    };
+                }
+                updateCartUI(); // Update cart to reflect new shipping costs
+            });
+
             trackStoreVisit();
+        }
+
+        function calculateShippingCost() {
+            const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
+            
+            if (totalItems === 0) return 0;
+            
+            let shippingCost = shippingSettings.baseCost;
+            
+            // Increase shipping cost if items exceed threshold
+            if (totalItems > shippingSettings.increaseThreshold) {
+                const extraItems = totalItems - shippingSettings.increaseThreshold;
+                const increaseAmount = shippingCost * (shippingSettings.increasePercentage / 100);
+                shippingCost += extraItems * increaseAmount;
+            }
+            
+            return parseFloat(shippingCost.toFixed(2));
         }
 
         function loadNotifications() {
@@ -987,8 +1035,8 @@
                 const stockStatus = getStockStatus(p.stock, p.lowStockAlert);
                 const saleBadge = p.salePrice ? `<span class="product-sale-badge">SALE</span>` : '';
                 const priceDisplay = p.salePrice ? 
-                    `<span class="product-original-price">$${Number(p.price).toFixed(2)}</span> <span class="product-price">$${Number(p.salePrice).toFixed(2)}</span>` :
-                    `<span class="product-price">$${Number(p.price).toFixed(2)}</span>`;
+                    `<span class="product-original-price">${Number(p.price).toFixed(2)} MAD</span> <span class="product-price">${Number(p.salePrice).toFixed(2)} MAD</span>` :
+                    `<span class="product-price">${Number(p.price).toFixed(2)} MAD</span>`;
                 
                 const cardHTML = `
                     <div class="product-card reveal" data-category="${p.category || ''}">
@@ -997,6 +1045,7 @@
                         </div>
                         <div class="product-info">
                             <h3>${p.name} ${saleBadge}</h3>
+                            <p class="product-description">${p.description || 'No description available.'}</p>
                             ${priceDisplay}
                             <span class="stock-status ${stockStatus.class}">${stockStatus.text}</span>
                         </div>
@@ -1009,7 +1058,7 @@
                 productsGrid.innerHTML += cardHTML;
             });
             
-            document.querySelectorAll('.btn-add').forEach(b => {
+            document.querySelectorAll('#productsGrid .btn-add').forEach(b => {
                 if (!b.disabled) {
                     b.addEventListener('click', handleAddToCart);
                 }
@@ -1032,8 +1081,8 @@
                 const stockStatus = getStockStatus(p.stock, p.lowStockAlert);
                 const saleBadge = p.salePrice ? `<span class="product-sale-badge">SALE</span>` : '';
                 const priceDisplay = p.salePrice ? 
-                    `<span class="product-original-price">$${Number(p.price).toFixed(2)}</span> <span class="product-price">$${Number(p.salePrice).toFixed(2)}</span>` :
-                    `<span class="product-price">$${Number(p.price).toFixed(2)}</span>`;
+                    `<span class="product-original-price">${Number(p.price).toFixed(2)} MAD</span> <span class="product-price">${Number(p.salePrice).toFixed(2)} MAD</span>` :
+                    `<span class="product-price">${Number(p.price).toFixed(2)} MAD</span>`;
                 
                 const cardHTML = `
                     <div class="product-card reveal">
@@ -1042,6 +1091,7 @@
                         </div>
                         <div class="product-info">
                             <h3>${p.name} ${saleBadge}</h3>
+                            <p class="product-description">${p.description || 'No description available.'}</p>
                             ${priceDisplay}
                             <span class="stock-status ${stockStatus.class}">${stockStatus.text}</span>
                         </div>
@@ -1113,6 +1163,7 @@
             const cartBody = document.querySelector('.cart-body');
             const subtotalEl = document.getElementById('cart-subtotal-price');
             const totalEl = document.getElementById('cart-total-price');
+            const shippingEl = document.getElementById('shipping-cost');
             const countEl = document.querySelector('.cart-count');
             const checkoutBtn = document.getElementById('checkoutBtn');
             cartBody.innerHTML = '';
@@ -1129,8 +1180,8 @@
                             <img src="${item.image}" alt="${item.name}">
                             <div class="cart-item-details">
                                 <h4>${item.name}</h4>
-                                <p>$${item.price.toFixed(2)} x ${item.quantity}</p>
-                                <p>$${(item.price * item.quantity).toFixed(2)}</p>
+                                <p>${item.price.toFixed(2)} MAD x ${item.quantity}</p>
+                                <p>${(item.price * item.quantity).toFixed(2)} MAD</p>
                             </div>
                             <button class="cart-item-remove" data-index="${index}">&times; Remove</button>
                         </div>
@@ -1153,24 +1204,27 @@
         function updateCartTotals() {
             const subtotalEl = document.getElementById('cart-subtotal-price');
             const totalEl = document.getElementById('cart-total-price');
+            const shippingEl = document.getElementById('shipping-cost');
             const discountSection = document.getElementById('discountSection');
             const discountAmountEl = document.getElementById('discount-amount');
             
             const subtotal = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+            const shippingCost = calculateShippingCost();
             
             let discount = 0;
             if (appliedCoupon) {
                 discount = subtotal * (appliedCoupon.discount / 100);
             }
             
-            const total = subtotal - discount;
+            const total = subtotal - discount + shippingCost;
             
-            subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
-            totalEl.textContent = `$${total.toFixed(2)}`;
+            subtotalEl.textContent = `${subtotal.toFixed(2)} MAD`;
+            shippingEl.textContent = `${shippingCost.toFixed(2)} MAD`;
+            totalEl.textContent = `${total.toFixed(2)} MAD`;
             
             if (discount > 0) {
                 discountSection.style.display = 'flex';
-                discountAmountEl.textContent = `-$${discount.toFixed(2)}`;
+                discountAmountEl.textContent = `-${discount.toFixed(2)} MAD`;
             } else {
                 discountSection.style.display = 'none';
             }
@@ -1269,7 +1323,8 @@
             
             const subtotal = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
             const discount = appliedCoupon ? subtotal * (appliedCoupon.discount / 100) : 0;
-            const total = subtotal - discount;
+            const shippingCost = calculateShippingCost();
+            const total = subtotal - discount + shippingCost;
             
             const orderData = { 
                 customer: { 
@@ -1281,6 +1336,7 @@
                 items: cart,
                 subtotal: subtotal,
                 discount: discount,
+                shipping: shippingCost,
                 total: total,
                 coupon: appliedCoupon ? appliedCoupon.code : null,
                 status: 'pending', 
